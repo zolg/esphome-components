@@ -1,20 +1,21 @@
 import gzip
 import logging
 from copy import deepcopy
+
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.config import strip_default_ids
-from esphome.cpp_generator import ArrayInitializer
-from esphome.yaml_util import dump
-from esphome.core import CORE, coroutine_with_priority, ID
 from esphome.components import web_server_base
 from esphome.components.web_server_base import CONF_WEB_SERVER_BASE_ID
+from esphome.config import strip_default_ids
 from esphome.const import (
     CONF_AUTH,
     CONF_ID,
     CONF_PASSWORD,
     CONF_USERNAME,
 )
+from esphome.core import CORE, ID, coroutine_with_priority
+from esphome.cpp_generator import ArrayInitializer
+from esphome.yaml_util import dump
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +66,6 @@ async def to_code(config):
                 cg.add(var.set_password(password))
 
     tx_config = _dump_config()
-    print(tx_config)
     gz_config = gzip.compress(tx_config.encode("utf-8"))
     arr_size = len(gz_config)
     arr_data = ", ".join(f"0x{x:02x}" for x in gz_config)

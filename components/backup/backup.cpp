@@ -43,7 +43,7 @@ void Backup::handleRequest(AsyncWebServerRequest *request) {
     return request->requestAuthentication();
   }
 #endif
-#if defined(USE_ESP_IDF) && ESPHOME_VERSION_CODE >= VERSION_CODE(2025, 7, 0)
+#ifndef USE_ESP8266
   auto *response = request->beginResponse(200, "plain/text;charset=UTF-8", ESPHOME_BACKUP_DATA, ESPHOME_BACKUP_SIZE);
 #else
   auto *response = request->beginResponse_P(200, "plain/text;charset=UTF-8", ESPHOME_BACKUP_DATA, ESPHOME_BACKUP_SIZE);
