@@ -3,7 +3,7 @@ from typing import Any
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import api, esp32, mqtt, uart, web_server, wifi
+import esphome.cpp_generator as cppg
 from esphome.const import (
     CONF_AREA,
     CONF_COMMENT,
@@ -20,6 +20,8 @@ from esphome.const import (
 )
 from esphome.core import CORE
 from esphome.core.config import CONF_NAME_ADD_MAC_SUFFIX
+
+from esphome.components import api, esp32, mqtt, uart, web_server, wifi
 
 from .. import cgp
 from . import const, cpp, var
@@ -44,6 +46,7 @@ KEY_NODE_NAME = "node_name"
 KEY_NODE_NAME_ADD_MAC_SUFFIX = "node_name_add_mac_suffix"
 KEY_WIFI_SSID = "wifi_network0_ssid"
 KEY_WIFI_PASSWORD = "wifi_network0_password"
+KEY_MQTT_HOST = "mqtt_host"
 
 USE_ARDUINO = "USE_ARDUINO"
 USE_API = "USE_API"
@@ -201,12 +204,12 @@ _PRESETS = OrderedDict(
         ),
         PRESET_MQTT: OrderedDict(
             {
-                "mqtt_host": {
+                KEY_MQTT_HOST: {
                     const.CONF_VAR_TYPE: var.VT_STR,
                     const.CONF_VAR_MIN: 1,
                     const.CONF_VAR_HELP: "The host of your MQTT broker",
                     const.CONF_VAR_GETTER: lambda c, _: c[mqtt.CONF_BROKER],
-                    const.CONF_VAR_SETTER: lambda _, o: o.set_broker_address,
+                    const.CONF_VAR_SETTER: lambda c, o: _mqtt_set_broker_address(c, o),
                 },
                 "mqtt_port": {
                     const.CONF_VAR_TYPE: var.VT_UINT16,
@@ -245,9 +248,9 @@ _PRESETS = OrderedDict(
                     const.CONF_VAR_GETTER: lambda _, o: _mqtt_access(
                         o
                     ).birth_message_topic(),
-                    const.CONF_VAR_SETTER: lambda _, o: _mqtt_access(
-                        o
-                    ).birth_message_topic,
+                    const.CONF_VAR_SETTER: lambda _, o: (
+                        _mqtt_access(o).birth_message_topic
+                    ),
                 },
                 "mqtt_will_message": {
                     const.CONF_VAR_TYPE: var.VT_STR,
@@ -263,9 +266,9 @@ _PRESETS = OrderedDict(
                     const.CONF_VAR_GETTER: lambda _, o: _mqtt_access(
                         o,
                     ).shutdown_message_topic(),
-                    const.CONF_VAR_SETTER: lambda _, o: _mqtt_access(
-                        o
-                    ).shutdown_message_topic,
+                    const.CONF_VAR_SETTER: lambda _, o: (
+                        _mqtt_access(o).shutdown_message_topic
+                    ),
                 },
                 "mqtt_log_topic": {
                     const.CONF_VAR_TYPE: var.VT_STR,
@@ -273,9 +276,9 @@ _PRESETS = OrderedDict(
                     const.CONF_VAR_GETTER: lambda _, o: _mqtt_access(
                         o
                     ).log_message_topic(),
-                    const.CONF_VAR_SETTER: lambda _, o: _mqtt_access(
-                        o
-                    ).log_message_topic,
+                    const.CONF_VAR_SETTER: lambda _, o: (
+                        _mqtt_access(o).log_message_topic
+                    ),
                 },
                 "mqtt_reboot_timeout": {
                     const.CONF_VAR_TYPE: var.VT_TIMEOUT,
@@ -290,26 +293,30 @@ _PRESETS = OrderedDict(
                 "web_server_username": {
                     const.CONF_VAR_TYPE: var.VT_STR,
                     const.CONF_VAR_HELP: "The username to use for authentication. Set to empty for remove authentication",
-                    const.CONF_VAR_GETTER: lambda c, _: c[web_server.CONF_AUTH][
-                        web_server.CONF_USERNAME
-                    ]
-                    if web_server.CONF_AUTH in c
-                    else "",
-                    const.CONF_VAR_SETTER: lambda c, _: cg.MockObj(
-                        c[web_server.CONF_WEB_SERVER_BASE_ID], "->"
-                    ).set_auth_username,
+                    const.CONF_VAR_GETTER: lambda c, _: (
+                        c[web_server.CONF_AUTH][web_server.CONF_USERNAME]
+                        if web_server.CONF_AUTH in c
+                        else ""
+                    ),
+                    const.CONF_VAR_SETTER: lambda c, _: (
+                        cg.MockObj(
+                            c[web_server.CONF_WEB_SERVER_BASE_ID], "->"
+                        ).set_auth_username
+                    ),
                 },
                 "web_server_password": {
                     const.CONF_VAR_TYPE: var.VT_PASSWORD,
                     const.CONF_VAR_HELP: "The password to check for authentication",
-                    const.CONF_VAR_GETTER: lambda c, _: c[web_server.CONF_AUTH][
-                        web_server.CONF_PASSWORD
-                    ]
-                    if web_server.CONF_AUTH in c
-                    else "",
-                    const.CONF_VAR_SETTER: lambda c, _: cg.MockObj(
-                        c[web_server.CONF_WEB_SERVER_BASE_ID], "->"
-                    ).set_auth_password,
+                    const.CONF_VAR_GETTER: lambda c, _: (
+                        c[web_server.CONF_AUTH][web_server.CONF_PASSWORD]
+                        if web_server.CONF_AUTH in c
+                        else ""
+                    ),
+                    const.CONF_VAR_SETTER: lambda c, _: (
+                        cg.MockObj(
+                            c[web_server.CONF_WEB_SERVER_BASE_ID], "->"
+                        ).set_auth_password
+                    ),
                 },
                 "web_server_log": {
                     const.CONF_VAR_TYPE: var.VT_BOOL,
@@ -376,9 +383,15 @@ def _node_setter(config, App: cg.MockObj):
     # void pre_setup(const std::string &name, const std::string &friendly_name, const char *area, const char *comment, const char *compilation_time, bool name_add_mac_suffix)
     # 2025.7.x
     # void pre_setup(const std::string &name, const std::string &friendly_name, const char *comment, const char *compilation_time, bool name_add_mac_suffix)
+    # 2026.1.x
+    # void pre_setup(const std::string &name, const std::string &friendly_name, bool name_add_mac_suffix)
 
     if cv.Version.parse(ESPHOME_VERSION) < cv.Version.parse("2025.7.0"):
         pre_setup_params.insert(2, config.get(CONF_AREA, ""))
+
+    if cv.Version.parse(ESPHOME_VERSION) > cv.Version.parse("2025.12.99"):
+        pre_setup_params.pop(2)
+        pre_setup_params.pop(2)
 
     ss.append(
         cgp.IfStatement(
@@ -461,6 +474,37 @@ def _mqtt_access(mqtt_comp: cg.MockObj):
     return cg.MockObj("settings::mqtt_access", "->")(mqtt_comp)
 
 
+def _mqtt_set_broker_address(config, mqtt_comp: cg.MockObj):
+    # return mqtt_comp.set_broker_address
+    nvs = cg.MockObj("nvs")
+
+    enable_on_boot = cg.MockObj("enable_on_boot")
+
+    ss = []
+    mqtt_host = _add_load_nvs_str_var(nvs, KEY_MQTT_HOST, ss)
+    st = cgp.IfStatement(
+        mqtt_host.has_value(),
+        [
+            cpp.log_expression(KEY_MQTT_HOST, var.VT_STR, mqtt_host.value()),
+            mqtt_comp.set_broker_address(mqtt_host.value()),
+            cgp.ConstAutoAssignmentExpression(
+                enable_on_boot,
+                cg.RawExpression(
+                    f"!{(mqtt_host.value().empty())} && {mqtt_host.value()} != {cppg.StringLiteral('0.0.0.0')}"
+                ),
+            ),
+            mqtt_comp.set_enable_on_boot(enable_on_boot),
+            cgp.esp_logd(
+                "main.settings",
+                "Turn MQTT enable_on_boot to %s",
+                cg.RawExpression(f"ONOFF({enable_on_boot})"),
+            ),
+        ],
+    )
+    ss.append(st)
+    return cgp.CodeBlock(None, None, ss)
+
+
 def _get_presets(cpresets: list[str]) -> OrderedDict[str, Any]:
     presets = OrderedDict()
 
@@ -479,11 +523,29 @@ def _get_presets(cpresets: list[str]) -> OrderedDict[str, Any]:
 
 
 def presets_init(cpresets: list[str], vars: dict[str, dict[str, Any]]):
-    for key, val in _get_presets(cpresets).items():
-        val.update(vars.get(key, {}))
-        vars[key] = val
+    if cpresets is None:
+        cpresets = []
 
-    if PRESET_WIFI in cpresets and CORE.using_esp_idf:
+    if cv.Version.parse(ESPHOME_VERSION) < cv.Version.parse("2026.1.0"):
+        for key, val in _get_presets(cpresets).items():
+            val.update(vars.get(key, {}))
+            vars[key] = val
+    elif vars:
+        raise cv.Invalid(
+            f"variables is not supported for esphome {ESPHOME_VERSION} yet"
+        )
+    else:
+        for key, val in _get_presets(cpresets).items():
+            # val.update(vars.get(key, {}))
+            vars[key] = val
+
+    is_esp32 = (
+        CORE.using_esp_idf
+        if cv.Version.parse(ESPHOME_VERSION) < cv.Version.parse("2026.1.0")
+        else CORE.is_esp32
+    )
+
+    if PRESET_WIFI in cpresets and is_esp32:
         esp32.add_idf_sdkconfig_option("CONFIG_WPA_11KV_SUPPORT", True)
         cg.add_define("USE_WIFI_11KV_SUPPORT")
         node_name = CORE.config[COMP_ESPHOME][CONF_NAME]

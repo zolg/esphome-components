@@ -197,7 +197,14 @@ void Settings::handle_json_(AsyncWebServerRequest *request) {  // NOLINT(readabi
   s.add_kv("pv", ESPHOME_PROJECT_VERSION);
 #endif
   s.add_kv("ev", ESPHOME_VERSION);
+
+#if ESPHOME_VERSION_CODE < VERSION_CODE(2026, 1, 4)
   s.add_kv("et", App.get_compilation_time());
+#else
+  char build_time_str[Application::BUILD_TIME_STR_SIZE];
+  App.get_build_time_string(build_time_str);
+  s.add_kv("et", build_time_str);
+#endif
 
   s.add_kv("m", this->menu_url_);
   s.start_array("v");

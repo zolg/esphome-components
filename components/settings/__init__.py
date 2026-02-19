@@ -245,7 +245,8 @@ def _add_resource(filename: str, resurce_name: str = ""):
 # Run with low priority so that all initilization be doing first
 @core.coroutine_with_priority(-1000.0)
 async def to_code(config):
-    presets.presets_init(config.get(CONF_PRESETS), config[CONF_VARIABLES])
+    vars = config[CONF_VARIABLES].copy()
+    presets.presets_init(config.get(CONF_PRESETS), vars)
 
     web = await cg.get_variable(config[web_server_base.CONF_WEB_SERVER_BASE_ID])
     settings = cg.new_Pvariable(config[CONF_ID], web)
@@ -256,7 +257,7 @@ async def to_code(config):
         cg.add(settings.set_username(config[CONF_AUTH][CONF_USERNAME]))
         cg.add(settings.set_password(config[CONF_AUTH][CONF_PASSWORD]))
 
-    vars = var.var_list(config[CONF_VARIABLES])
+    vars = var.var_list(vars)
     # registering vars first
     await cpp.register_vars(settings, vars)
     # last step, loading settings
